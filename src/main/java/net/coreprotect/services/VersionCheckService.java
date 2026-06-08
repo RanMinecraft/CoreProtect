@@ -30,10 +30,10 @@ public class VersionCheckService {
             // Check Minecraft version compatibility
             String numericVersion = Bukkit.getServer().getBukkitVersion().split("-", 2)[0];
             String[] bukkitVersion = numericVersion.split("\\.");
-            if (bukkitVersion.length < 2 || !bukkitVersion[0].matches("\\d+") || !bukkitVersion[1].matches("\\d+")) {
+            /*if (bukkitVersion.length < 2 || !bukkitVersion[0].matches("\\d+") || !bukkitVersion[1].matches("\\d+")) {
                 Chat.console(Phrase.build(Phrase.VERSION_INCOMPATIBLE, "Minecraft", numericVersion));
                 return false;
-            }
+            }*/
 
             String currentVersion = bukkitVersion[0] + "." + bukkitVersion[1] + (bukkitVersion.length > 2 && bukkitVersion[2].matches("\\d+") ? "." + bukkitVersion[2] : "");
 
@@ -55,11 +55,11 @@ public class VersionCheckService {
             }
 
             // Patch version validation
-            if (VersionUtils.newVersion(ConfigHandler.PATCH_VERSION, VersionUtils.getPluginVersion()) && !VersionUtils.isBranch("dev")) {
+            /*if (VersionUtils.newVersion(ConfigHandler.PATCH_VERSION, VersionUtils.getPluginVersion()) && !VersionUtils.isBranch("dev")) {
                 Chat.console(Phrase.build(Phrase.VERSION_INCOMPATIBLE, "CoreProtect", "v" + VersionUtils.getPluginVersion()));
                 Chat.sendConsoleMessage(Color.GREY + "[CoreProtect] " + Phrase.build(Phrase.INVALID_BRANCH_2));
                 return false;
-            }
+            }*/
 
             // Branch validation
             if (ConfigHandler.EDITION_BRANCH.length() == 0) {
