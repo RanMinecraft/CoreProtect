@@ -59,7 +59,7 @@ public class VersionCheckService {
                 Chat.console(Phrase.build(Phrase.VERSION_INCOMPATIBLE, "CoreProtect", "v" + VersionUtils.getPluginVersion()));
                 Chat.sendConsoleMessage(Color.GREY + "[CoreProtect] " + Phrase.build(Phrase.INVALID_BRANCH_2));
                 return false;
-            }*/
+            }
 
             // Branch validation
             if (ConfigHandler.EDITION_BRANCH.length() == 0) {
@@ -67,7 +67,7 @@ public class VersionCheckService {
                 Chat.sendConsoleMessage(Color.GREY + "[CoreProtect] " + Phrase.build(Phrase.INVALID_BRANCH_2));
                 Chat.sendConsoleMessage(Color.GREY + "[CoreProtect] " + Phrase.build(Phrase.INVALID_BRANCH_3));
                 return false;
-            }
+            }*/
 
             // Store Minecraft server version for later use
             int major = Integer.parseInt(bukkitVersion[0]);
