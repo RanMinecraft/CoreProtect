@@ -25,6 +25,7 @@ import net.coreprotect.consumer.Queue;
 import net.coreprotect.database.ConsumerEntitySpawnUpdates;
 import net.coreprotect.database.ConsumerWriteBatch;
 import net.coreprotect.database.Database;
+import net.coreprotect.database.DatabaseType;
 import net.coreprotect.database.DuckDBRecovery;
 import net.coreprotect.database.logger.EntityInteractionLogger;
 import net.coreprotect.database.rollback.EntitySpawnRollbackHandler;
@@ -280,6 +281,7 @@ public class Process {
                     int replaceData = (int) data[5];
                     int forceData = (int) data[6];
                     boolean isolatedTransaction = requiresIsolatedDuckDBTransaction(action);
+                    Exception duplicateEntityUuidFailure = null;
                     preparingEvent = null;
 
                     if (isolatedTransaction && i > processedThrough) {
@@ -361,6 +363,11 @@ public class Process {
                                         });
                                     }
                                     catch (Exception e) {
+                                        if (shouldDiscardFailedEvent(ConfigHandler.databaseType, action, e)) {
+                                            Database.acknowledgeRollbackOnlyTransaction();
+                                            duplicateEntityUuidFailure = e;
+                                            break;
+                                        }
                                         pendingEntityInteractions.add(new PendingEntityInteraction(user, interaction, false, true));
                                         throw e;
                                     }
@@ -566,6 +573,13 @@ public class Process {
                             completeFailedConsumerBatch(processId, consumerData, users, consumerObject, processedThrough, i + 1, outcome == TransactionOutcome.RETAINED);
                             return;
                         }
+                        if (duplicateEntityUuidFailure != null) {
+                            EntityInteraction interaction = (EntityInteraction) consumerObject.get(id);
+                            cancelEntityInteractionPromotion(interaction);
+                            ErrorReporter.report(new IllegalStateException("Dropped entity interaction after a duplicate DuckDB entity UUID prevented identity creation: " + interaction.getEntityUuid(), duplicateEntityUuidFailure));
+                            retryConsumerBatch(processId, consumerData, users, consumerObject, processedThrough);
+                            return;
+                        }
                         if (!beginConsumerTransaction(writeBatch)) {
                             retryConsumerBatch(processId, consumerData, users, consumerObject, processedThrough);
                             return;
@@ -652,6 +666,23 @@ public class Process {
         else if (!Consumer.isPersistenceHalted()) {
             deferConsumerRetry();
         }
+    }
+
+    protected static boolean requiresEntityUuidMaintenance(int processId) {
+        if (!ConfigHandler.databaseType.isDuckDB()) {
+            return false;
+        }
+        for (Object object : Consumer.consumerObjects.get(processId).values()) {
+            EntitySpawnData update = getEntitySpawnUpdate(object);
+            if (update == null) {
+                continue;
+            }
+            EntitySpawnData.Operation operation = update.getOperation();
+            if (operation == EntitySpawnData.Operation.REVIVED || operation == EntitySpawnData.Operation.RESTORE || operation == EntitySpawnData.Operation.KILL_ROLLBACK) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static void bindPendingEntitySpawnIdentities(ArrayList<Object[]> consumerData, Map<Integer, Object> consumerObjects, Map<UUID, EntitySpawnIdentity> identities, Map<Integer, EntitySpawnIdentity> identitiesByRowId) {
@@ -1045,6 +1076,24 @@ public class Process {
             failure = failure.getCause();
         }
         return !sqlFailure;
+    }
+
+    static boolean shouldDiscardFailedEvent(DatabaseType databaseType, int action, Throwable failure) {
+        if (!databaseType.isDuckDB() || action != ENTITY_INTERACTION) {
+            return false;
+        }
+
+        Set<Throwable> visited = new HashSet<>();
+        while (failure != null && visited.add(failure)) {
+            String message = failure.getMessage();
+            if (failure instanceof SQLException && message != null
+                    && message.contains("Constraint Error: Duplicate key \"uuid: ")
+                    && message.contains("violates unique constraint")) {
+                return true;
+            }
+            failure = failure.getCause();
+        }
+        return false;
     }
 
     private static void clearConsumerData(int processId, ArrayList<Object[]> consumerData, Map<Integer, String[]> users, Map<Integer, Object> consumerObject) {
